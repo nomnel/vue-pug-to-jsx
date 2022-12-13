@@ -76,8 +76,8 @@ function compileTagNode(node: TagNode): string {
         .join('')
     : node.name;
   let result = `<${name}`;
-  for (const attr of node.attrs) {
-    result += ` ${compileTagAttr(attr)}`;
+  if (node.attrs.length > 0) {
+    result += ` ${compileTagAttrs(node.attrs)}`;
   }
   const vSlots = node.block.nodes.filter(isTagNode).filter((x) => x.attrs.some((y) => y.name.match(/^v-slot/)));
   if (vSlots.length > 0) {
@@ -165,32 +165,69 @@ function parseVFor(dir: NodeAttr): { variable: string; iterable: string } {
   return { variable: n[1], iterable: n[2] };
 }
 
+function compileTagAttrs(attrs: NodeAttr[]): string {
+  const canBeMerged = (x: NodeAttr) => !isVueDirective(x) && typeof x.val !== 'boolean';
+  const groups = groupBy(attrs, canBeMerged);
+  const map = {
+    canBeMergedAttrs: groups.find((x) => x[0])?.[1] || [],
+    canNotBeMergedAttrs: groups.find((x) => !x[0])?.[1] || [],
+  };
+  const mergedAttrs = map.canBeMergedAttrs.reduce((acc, x) => {
+    if (acc.has(x.name))
+      acc.set(x.name, {
+        ...acc.get(x.name)!,
+        val: `${stripQuotes(acc.get(x.name)!.val as string)} ${stripQuotes(x.val as string)}`,
+      });
+    else acc.set(x.name, x);
+    return acc;
+  }, new Map<string, NodeAttr>());
+
+  return [...map.canNotBeMergedAttrs, ...mergedAttrs.values()].map(compileTagAttr).join(' ');
+}
+
+function groupBy<K, V>(array: readonly V[], keyOf: (value: V) => K): [K, V[]][] {
+  return Array.from(
+    array.reduce((map, value) => {
+      const key = keyOf(value);
+      const values = map.get(key);
+      if (values) values.push(value);
+      else map.set(key, [value]);
+      return map;
+    }, new Map<K, V[]>())
+  );
+}
+
+function isVueDirective(attr: NodeAttr): boolean {
+  return attr.name.startsWith('v-') || attr.name.startsWith(':') || attr.name.startsWith('@');
+}
+
 function compileTagAttr(attr: NodeAttr): string {
   if (attr.val === true) {
     return attr.name;
   } else if (attr.val === false) {
     return `${attr.name}={false}`;
-  } else if (attr.name === 'v-model') {
-    const m = attr.val.match(/^['"](.+)['"]$/);
-    const val = m ? m[1] : attr.val;
+  }
+
+  const val = stripQuotes(attr.val);
+  if (attr.name === 'v-model') {
     return `value={${val}} oninput={(x) => ${val}.value = x }`;
   } else if (attr.name.charAt(0) === ':') {
-    const m = attr.val.match(/^['"](.+)['"]$/);
-    if (!m || !m[1]) throw new Error(`invalid v-bind: ${attr.val}`);
     const name = attr.name.slice(1).replaceAll('.', '_TODO_');
-    return `${name}={${m[1]}}`;
+    return `${name}={${val}}`;
   } else if (attr.name.charAt(0) === '@') {
-    const m = attr.val.match(/^['"](.+)['"]$/);
-    return `on${attr.name.slice(1)}={${m ? m[1] : attr.val}}`;
+    return `on${attr.name.slice(1)}={${val}}`;
   } else {
-    const m = attr.val.match(/^['"](.+)['"]$/);
-    return `${attr.name}="${m ? m[1] : attr.val}"`;
+    return `${attr.name}="${val}"`;
   }
 }
 
 function compileTextNode(node: TextNode): string {
   const m = node.val.match(/^{{(.+)}}$/);
   return m ? `{${m[1]}}` : node.val;
+}
+
+function stripQuotes(str: string): string {
+  return str.replace(/^['"](.+)['"]$/, '$1');
 }
 
 export {};

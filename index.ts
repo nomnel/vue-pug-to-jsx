@@ -123,10 +123,10 @@ function compileVSlot(node: TagNode, dir: NodeAttr): string {
   const vFor = node.attrs.find((x) => x.name === 'v-for');
   if (vFor) {
     const { variable, iterable } = parseVFor(vFor);
-    return `...(${iterable}.reduce((acc, ${variable}) => (acc${name} = (${args}) => (${compileTagNode({
+    return `...(${iterable}.reduce((acc, ${variable}) => {acc${name} = (${args}) => (${compileTagNode({
       ...node,
       attrs: node.attrs.filter((x) => x.name !== dir.name && x.name !== 'v-for'),
-    })})), {})),`;
+    })}); return acc}, {})),`;
   } else {
     return `"${name}": (${args}) => (${compileTagNode({
       ...node,

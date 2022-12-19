@@ -35,7 +35,7 @@ interface TextNode {
   filename: string;
 }
 
-export function transpile(src: string, filename: string): string {
+export function transpile(src: string, filename: string = 'dummy.pug'): string {
   const tokens = lex(src, { filename });
   const ast: BlockNode = parse(tokens, { filename, src });
   return compileBlockNode(ast);
@@ -62,7 +62,7 @@ function compileTagNode(node: TagNode): string {
   const vFor = node.attrs.find((x) => x.name === 'v-for');
   if (vFor) return compileVueDirective(node, vFor);
 
-  const m = node.name.match(/^v-/);
+  const m = node.name.match(/-/);
   const name = m
     ? node.name
         .split('-')
